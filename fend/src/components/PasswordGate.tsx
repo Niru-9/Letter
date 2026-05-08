@@ -2,25 +2,28 @@ import { useState, FormEvent } from 'react';
 import { Lock } from 'lucide-react';
 
 interface PasswordGateProps {
-  onUnlock: () => void;
-  correctPassword?: string;
+  onUnlock: (password: string) => Promise<void>;
 }
 
-export function PasswordGate({ onUnlock, correctPassword = 'khushu' }: PasswordGateProps) {
+export function PasswordGate({ onUnlock }: PasswordGateProps) {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [unlocking, setUnlocking] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (password.toLowerCase() === correctPassword.toLowerCase()) {
-      setError(false);
-      setUnlocking(true);
-      setTimeout(() => onUnlock(), 1500);
-    } else {
-      setError(true);
-      setTimeout(() => setError(false), 2000);
+    if (!password.trim() || unlocking) return;
+
+    setUnlocking(true);
+    setError('');
+    try {
+      await onUnlock(password);
+      // onUnlock transitions scene on success
+    } catch {
+      setError('Hmm… that doesn\'t feel right 💔');
       setPassword('');
+    } finally {
+      setUnlocking(false);
     }
   };
 
@@ -48,11 +51,8 @@ export function PasswordGate({ onUnlock, correctPassword = 'khushu' }: PasswordG
           />
         </div>
 
-        {/* Fixed-height slot so the button never shifts when error appears */}
         <div className="error-slot">
-          {error && (
-            <p className="error-message">Hmm… that doesn't feel right 💔</p>
-          )}
+          {error && <p className="error-message">{error}</p>}
         </div>
 
         <button type="submit" className="unlock-btn" disabled={unlocking}>

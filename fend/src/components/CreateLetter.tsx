@@ -6,6 +6,7 @@ const IMGBB_KEY = '9635999d6d2859ccc646959bf0043cf0';
 
 interface CreateLetterProps {
   onCreated: (data: { message: string; password: string; photoUrl?: string }) => void;
+  loading?: boolean;
 }
 
 // Compress to max 1024px, JPEG 0.8 before uploading
@@ -50,7 +51,7 @@ async function uploadToImgbb(base64: string): Promise<string> {
   return json.data.url as string;
 }
 
-export function CreateLetter({ onCreated }: CreateLetterProps) {
+export function CreateLetter({ onCreated, loading = false }: CreateLetterProps) {
   const [message, setMessage] = useState('');
   const [password, setPassword] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -186,9 +187,9 @@ export function CreateLetter({ onCreated }: CreateLetterProps) {
           type="submit"
           className="unlock-btn"
           style={{ alignSelf: 'center' }}
-          disabled={uploading}
+          disabled={uploading || loading}
         >
-          {uploading ? 'Uploading photo…' : <>Create & Lock <Lock size={16} /></>}
+          {loading ? 'Saving...' : uploading ? 'Uploading photo…' : <>Create & Lock <Lock size={16} /></>}
         </button>
       </form>
     </div>

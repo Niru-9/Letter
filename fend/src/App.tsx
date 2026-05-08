@@ -9,83 +9,62 @@ import { ShareLetter } from './components/ShareLetter';
 
 type Scene = 'create' | 'share' | 'locked' | 'envelope' | 'letter' | 'ending';
 
-// ── Compression helpers (browser built-in, no library needed) ────────────────
-
-async function compress(str: string): Promise<string> {
-  const bytes = new TextEncoder().encode(str);
-  const stream = new CompressionStream('deflate-raw');
-  const writer = stream.writable.getWriter();
-  writer.write(bytes);
-  writer.close();
-  const compressed = await new Response(stream.readable).arrayBuffer();
-  // Convert to base64url (no +/= chars) so it's URL-safe without encoding
-  return btoa(String.fromCharCode(...new Uint8Array(compressed)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function decompress(b64url: string): Promise<string> {
-  // Restore standard base64
-  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(b64);
-  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-  const stream = new DecompressionStream('deflate-raw');
-  const writer = stream.writable.getWriter();
-  writer.write(bytes);
-  writer.close();
-  const decompressed = await new Response(stream.readable).arrayBuffer();
-  return new TextDecoder().decode(decompressed);
-}
-
-// ── App ──────────────────────────────────────────────────────────────────────
+const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export default function App() {
   const [currentScene, setCurrentScene] = useState<Scene>('create');
-  const [letterData, setLetterData] = useState<{ message: string; password: string; photoUrl?: string } | null>(null);
+  const [letterId, setLetterId] = useState('');
+  const [letterData, setLetterData] = useState<{ message: string; photoUrl?: string } | null>(null);
   const [shareUrl, setShareUrl] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash.startsWith('#secret=')) {
-      const token = hash.replace('#secret=', '');
-      decompress(token)
-        .then((str) => {
-          const data = JSON.parse(str);
-          if (data?.message && data?.password) {
-            setLetterData({ message: data.message, password: data.password, photoUrl: data.photoUrl });
-            setCurrentScene('locked');
-          } else {
-            setCurrentScene('create');
-          }
-        })
-        .catch(() => {
-          // Fallback: try old uncompressed format for backwards compatibility
-          try {
-            const decodedStr = decodeURIComponent(escape(atob(token)));
-            const data = JSON.parse(decodedStr);
-            if (data?.message && data?.password) {
-              setLetterData({ message: data.message, password: data.password, photoUrl: data.photoUrl });
-              setCurrentScene('locked');
-              return;
-            }
-          } catch {
-            // ignore
-          }
-          setCurrentScene('create');
-        });
+    if (hash.startsWith('#id=')) {
+      const id = hash.replace('#id=', '');
+      if (id) {
+        setLetterId(id);
+        setCurrentScene('locked');
+      }
     } else {
       setCurrentScene('create');
     }
   }, []);
 
+  // Called by CreateLetter — saves to backend, gets short ID
   const handleCreate = async (data: { message: string; password: string; photoUrl?: string }) => {
-    const payload = JSON.stringify(data);
-    const token = await compress(payload);
-    const url = `${window.location.origin}${window.location.pathname}#secret=${token}`;
-    setShareUrl(url);
-    setCurrentScene('share');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/letters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to save letter');
+      const { id } = await res.json();
+      const url = `${window.location.origin}${window.location.pathname}#id=${id}`;
+      setShareUrl(url);
+      setCurrentScene('share');
+    } catch {
+      alert('Could not save letter. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUnlock = () => setCurrentScene('envelope');
+  // Called by PasswordGate — verifies password, fetches letter content
+  const handleUnlock = async (password: string) => {
+    const res = await fetch(`${API}/api/letters/${letterId}/unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) throw new Error('Wrong password');
+    const data = await res.json();
+    setLetterData({ message: data.message, photoUrl: data.photoUrl });
+    setCurrentScene('envelope');
+  };
+
   const handleEnvelopeOpen = () => setCurrentScene('letter');
   const handleSeal = () => setCurrentScene('ending');
 
@@ -94,7 +73,7 @@ export default function App() {
       <BackgroundEffects />
 
       {currentScene === 'create' && (
-        <CreateLetter onCreated={handleCreate} />
+        <CreateLetter onCreated={handleCreate} loading={loading} />
       )}
 
       {currentScene === 'share' && (
@@ -102,7 +81,7 @@ export default function App() {
       )}
 
       {currentScene === 'locked' && (
-        <PasswordGate onUnlock={handleUnlock} correctPassword={letterData?.password || ''} />
+        <PasswordGate onUnlock={handleUnlock} />
       )}
 
       {currentScene === 'envelope' && (

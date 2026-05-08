@@ -398,8 +398,10 @@ body.letter-open {
 .letter-content {
   font-family: var(--font-handwriting);
   font-size: 1.75rem;
-  line-height: 2rem; /* align to lined paper */
+  line-height: 2rem;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
   position: relative;
   color: var(--color-text-dark);
 }
@@ -602,9 +604,7 @@ body.letter-open {
   10%  { opacity: 0.7; }
   90%  { opacity: 0.7; }
   100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
-}
-
-/* ── PHOTO IN LETTER ──────────────────────────────────────────────────────── */
+}/* ── PHOTO IN LETTER ──────────────────────────────────────────────────────── */
 .letter-photo-wrapper {
   margin-top: 28px;
   opacity: 0;
@@ -771,6 +771,9 @@ body.letter-open {
 .letter-paper {
   background: linear-gradient(160deg, #fdf8f0 0%, #faf3e8 100%) !important;
   position: relative;
+  overflow-x: hidden;
+  /* Extra padding so content never goes under the 120px rose corners */
+  padding: 100px 50px 100px 50px !important;
 }
 
 .letter-rose {
@@ -796,7 +799,14 @@ body.letter-open {
 }
 
 .letter-top-dec  { position: relative; z-index: 3; padding-top: 10px; }
-.letter-content  { position: relative; z-index: 3; padding: 0 24px; }
+.letter-content  {
+  position: relative;
+  z-index: 3;
+  /* Push text inward so it clears the rose corners (120px roses) */
+  padding: 0 30px;
+  margin-top: 8px;
+}
+.letter-photo-wrapper { position: relative; z-index: 3; }
 .seal-button-container { position: relative; z-index: 3; }
 
 /* Mobile: slightly smaller roses */

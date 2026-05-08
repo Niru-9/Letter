@@ -1,99 +1,98 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { randomBytes } from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
-  'https://143letters.vercel.app',   // production Vercel frontend
-  'http://localhost:3000',           // local dev
-  process.env.FRONTEND_URL,         // any extra override via env var
+  'https://143letters.vercel.app',
+  'http://localhost:3000',
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (Render health checks, curl, etc.)
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS: origin "${origin}" not allowed`));
-      }
-    },
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type'],
-  })
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error(`CORS: origin "${origin}" not allowed`));
+  },
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+}));
 
-app.use(express.json());
+app.use(express.json({ limit: '5mb' })); // allow photo URLs
 
-// ── ROUTES ────────────────────────────────────────────────────────────────────
+// ── In-memory store (resets on redeploy — fine for free tier) ────────────────
+// For persistence, swap with a free DB like Upstash Redis or Supabase later
+const letters = new Map();
 
-// Health check — Render pings this to confirm the service is alive
+// Auto-delete letters older than 30 days to save memory
+const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function generateId() {
+  return randomBytes(4).toString('hex'); // 8 char hex e.g. "a3f9c12b"
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', letters: letters.size, timestamp: new Date().toISOString() });
 });
 
-// Root
 app.get('/', (_req, res) => {
-  res.json({ message: '143 Letters API is running 💌' });
+  res.json({ message: '143 Letters API 💌' });
 });
 
 /**
- * POST /api/encode
- * Body: { message: string, password: string }
- * Returns: { token: string }  — base64 encoded payload for the share URL
+ * POST /api/letters
+ * Body: { message, password, photoUrl? }
+ * Returns: { id } — short 8-char ID
  */
-app.post('/api/encode', (req, res) => {
-  const { message, password } = req.body;
-
+app.post('/api/letters', (req, res) => {
+  const { message, password, photoUrl } = req.body;
   if (!message || !password) {
     return res.status(400).json({ error: 'message and password are required' });
   }
 
-  try {
-    const payload = JSON.stringify({ message, password });
-    const token = Buffer.from(unescape(encodeURIComponent(payload))).toString('base64');
-    res.json({ token });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to encode letter' });
+  const id = generateId();
+  letters.set(id, {
+    message,
+    password,
+    photoUrl: photoUrl || null,
+    createdAt: Date.now(),
+  });
+
+  // Clean up expired letters
+  for (const [key, val] of letters.entries()) {
+    if (Date.now() - val.createdAt > TTL_MS) letters.delete(key);
   }
+
+  res.json({ id });
 });
 
 /**
- * POST /api/decode
- * Body: { token: string, password: string }
- * Returns: { message: string } on success, 401 on wrong password
+ * POST /api/letters/:id/unlock
+ * Body: { password }
+ * Returns: { message, photoUrl } on success, 401 on wrong password
  */
-app.post('/api/decode', (req, res) => {
-  const { token, password } = req.body;
+app.post('/api/letters/:id/unlock', (req, res) => {
+  const letter = letters.get(req.params.id);
+  if (!letter) return res.status(404).json({ error: 'Letter not found 💔' });
 
-  if (!token || !password) {
-    return res.status(400).json({ error: 'token and password are required' });
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: 'password is required' });
+
+  if (letter.password.toLowerCase() !== password.toLowerCase()) {
+    return res.status(401).json({ error: 'Wrong password 💔' });
   }
 
-  try {
-    const decoded = decodeURIComponent(escape(Buffer.from(token, 'base64').toString('utf8')));
-    const data = JSON.parse(decoded);
-
-    if (!data.message || !data.password) {
-      return res.status(400).json({ error: 'Invalid token format' });
-    }
-
-    if (data.password.toLowerCase() !== password.toLowerCase()) {
-      return res.status(401).json({ error: 'Wrong password 💔' });
-    }
-
-    res.json({ message: data.message });
-  } catch (err) {
-    res.status(400).json({ error: 'Invalid or corrupted token' });
-  }
+  res.json({ message: letter.message, photoUrl: letter.photoUrl });
 });
 
-// ── START ─────────────────────────────────────────────────────────────────────
+// ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`✅  143 Letters API listening on port ${PORT}`);
+  console.log(`✅  143 Letters API on port ${PORT}`);
   console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
 });
