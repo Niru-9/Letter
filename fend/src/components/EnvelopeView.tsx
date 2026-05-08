@@ -1,39 +1,60 @@
 import { useState } from 'react';
+import { HeartBurst } from './HeartBurst';
 
 interface EnvelopeViewProps {
   onOpen: () => void;
 }
 
+// Sequence timeline (ms):
+//  0        — user taps → heart burst starts
+//  2400     — burst done → envelope flap opens
+//  2400+1500 = 3900 — envelope fully open, letter slides up
+//  3900+1500 = 5400 — transition to letter scene
+
 export function EnvelopeView({ onOpen }: EnvelopeViewProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'burst' | 'open' | 'out'>('idle');
 
-  const handleOpen = () => {
-    if (isOpen) return;
-    setIsOpen(true);
-    
-    // Sequence animations
-    setTimeout(() => {
-      setIsTransitioning(true);
-    }, 2000); // After envelope opens completely and letter slides out
+  const handleTap = () => {
+    if (phase !== 'idle') return;
+    setPhase('burst');
+  };
 
-    setTimeout(() => {
-      onOpen();
-    }, 4000); // Total duration before switching scene
+  // Called by HeartBurst when the burst animation finishes
+  const handleBurstDone = () => {
+    setPhase('open');
+
+    // After envelope opens + letter slides up, transition out
+    setTimeout(() => setPhase('out'), 1800);
+    setTimeout(() => onOpen(), 3200);
   };
 
   return (
-    <div className="envelope-scene">
-      <div className={`envelope-wrapper ${isOpen ? 'open' : ''} ${isTransitioning ? 'transitioning-out' : ''}`} onClick={handleOpen}>
-        <div className="envelope-body">
-          <div className="envelope-front-left"></div>
-          <div className="envelope-front-right"></div>
-          <div className="envelope-front-bottom"></div>
+    <>
+      {/* Heart burst — renders above everything */}
+      <HeartBurst active={phase === 'burst'} onDone={handleBurstDone} />
+
+      <div className="envelope-scene">
+        <div
+          className={[
+            'envelope-wrapper',
+            phase === 'open' || phase === 'out' ? 'open' : '',
+            phase === 'out' ? 'transitioning-out' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onClick={handleTap}
+        >
+          <div className="envelope-body">
+            <div className="envelope-front-left" />
+            <div className="envelope-front-right" />
+            <div className="envelope-front-bottom" />
+          </div>
+          <div className="letter-inside" />
+          <div className="envelope-flap" />
         </div>
-        <div className="letter-inside"></div>
-        <div className="envelope-flap"></div>
+
+        {phase === 'idle' && <h2 className="envelope-hint">Tap to open</h2>}
       </div>
-      {!isOpen && <h2 className="envelope-hint">Tap to open</h2>}
-    </div>
+    </>
   );
 }

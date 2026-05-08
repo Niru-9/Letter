@@ -620,6 +620,48 @@ body {
   100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
 }
 
+/* ── HEART BURST OVERLAY ──────────────────────────────────────────────────── */
+.heart-burst-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.8s ease;
+}
+
+.heart-burst-overlay.fading {
+  opacity: 0;
+}
+
+.burst-heart {
+  position: absolute;
+  display: block;
+  line-height: 1;
+  opacity: 0;
+  animation: burstRise 1.6s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes burstRise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.3);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(-12vh) scale(1.15);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-110vh) scale(0.8);
+  }
+}
+
 /* ── MEDIA QUERIES ────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .gate-title {
