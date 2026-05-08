@@ -171,14 +171,19 @@ body {
   animation: shake 0.45s ease-in-out;
 }
 
-.error-message {
-  position: absolute;
-  top: 100%;
-  left: 0;
+.error-slot {
+  min-height: 28px;
   width: 100%;
-  color: #c0392b;
-  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-top: 6px;
+}
+
+.error-message {
+  color: #c0392b;
+  font-size: 0.82rem;
+  text-align: center;
   animation: fadeIn 0.3s forwards;
 }
 
