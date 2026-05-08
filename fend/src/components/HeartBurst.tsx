@@ -2,107 +2,87 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface Heart {
   id: number;
-  // final resting position
-  tx: number;
-  ty: number;
-  // current position
-  cx: number;
-  cy: number;
-  // velocity
-  vx: number;
-  vy: number;
-  size: number;
+  tx: number; ty: number;   // final position
+  cx: number; cy: number;   // current position
+  vx: number; vy: number;
   finalSize: number;
+  currentSize: number;
   color: string;
   rotation: number;
   rotSpeed: number;
-  scale: number;
   alpha: number;
   landed: boolean;
   visible: boolean;
-  // delay before this heart launches (ms)
-  delay: number;
+  delay: number;   // ms before launch
   launched: boolean;
 }
 
+// ❤️ emoji colors via fillStyle — rich reds
 const COLORS = [
   '#e8003d', '#c0002e', '#ff1744', '#d50000',
   '#ff4569', '#b71c1c', '#e53935', '#ff5252',
-  '#c62828', '#ad1457',
+  '#c62828', '#ad1457', '#880e4f',
 ];
 
-const BRUSH_RADIUS = 62;
-const CLEAR_THRESHOLD = 0.68;
+const BRUSH_RADIUS = 68;
+const CLEAR_THRESHOLD = 0.65;
 
-function drawHeart(
+function drawEmoji(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
-  size: number, color: string,
-  rotation: number, alpha: number
+  size: number, alpha: number
 ) {
-  if (alpha <= 0 || size <= 0) return;
-  const s = size / 2;
+  if (alpha <= 0.02 || size < 2) return;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.translate(x, y);
-  ctx.rotate(rotation);
-  ctx.beginPath();
-  ctx.moveTo(0, s * 0.35);
-  ctx.bezierCurveTo(-s * 0.1, s * 0.1, -s, s * 0.1, -s, -s * 0.25);
-  ctx.bezierCurveTo(-s, -s * 0.75, 0, -s * 0.9, 0, -s * 0.4);
-  ctx.bezierCurveTo(0, -s * 0.9, s, -s * 0.75, s, -s * 0.25);
-  ctx.bezierCurveTo(s, s * 0.1, s * 0.1, s * 0.1, 0, s * 0.35);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+  ctx.font = `${size}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('❤️', x, y);
   ctx.restore();
 }
 
 function buildHearts(w: number, h: number): Heart[] {
   const isMobile = w < 768;
-  const cols = isMobile ? 8 : 13;
-  const rows = isMobile ? 13 : 16;
+  // Dense enough to fully cover — extra hearts at edges
+  const cols = isMobile ? 10 : 16;
+  const rows = isMobile ? 16 : 20;
   const hearts: Heart[] = [];
   let id = 0;
 
-  // Envelope origin — center of screen, slightly below middle
   const ox = w * 0.5;
   const oy = h * 0.56;
+  const maxDist = Math.hypot(w, h);
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const jx = (Math.random() - 0.5) * (w / cols) * 0.85;
-      const jy = (Math.random() - 0.5) * (h / rows) * 0.85;
+      const jx = (Math.random() - 0.5) * (w / cols) * 0.9;
+      const jy = (Math.random() - 0.5) * (h / rows) * 0.9;
       const tx = (w / (cols - 1)) * c + jx;
       const ty = (h / (rows - 1)) * r + jy;
 
-      // Distance from origin determines delay — close hearts launch first
-      const dist = Math.hypot(tx - ox, ty - oy);
-      const maxDist = Math.hypot(w, h);
-      // Stagger: 0ms (closest) → 600ms (farthest)
-      const delay = (dist / maxDist) * 600 + Math.random() * 80;
-
-      // Direction vector from origin to target
       const dx = tx - ox;
       const dy = ty - oy;
-      const len = Math.max(dist, 1);
+      const dist = Math.hypot(dx, dy) || 1;
 
-      // Initial velocity: fast outward burst, will spring to target
-      const speed = 18 + (dist / maxDist) * 14;
+      // Closer hearts launch first, farther ones follow — wave effect
+      const delay = (dist / maxDist) * 700 + Math.random() * 60;
+
+      // Initial velocity: fast outward burst
+      const speed = 22 + (dist / maxDist) * 16;
 
       hearts.push({
         id: id++,
         tx, ty,
-        cx: ox,
-        cy: oy,
-        vx: (dx / len) * speed + (Math.random() - 0.5) * 5,
-        vy: (dy / len) * speed + (Math.random() - 0.5) * 5,
-        finalSize: Math.random() * 22 + 28,
-        size: 0,
+        cx: ox + (Math.random() - 0.5) * 20,
+        cy: oy + (Math.random() - 0.5) * 20,
+        vx: (dx / dist) * speed + (Math.random() - 0.5) * 4,
+        vy: (dy / dist) * speed + (Math.random() - 0.5) * 4,
+        finalSize: Math.random() * 20 + 28, // 28–48px
+        currentSize: 4, // starts tiny — grows as it flies = "coming at you"
         color: COLORS[Math.floor(Math.random() * COLORS.length)],
-        rotation: (Math.random() - 0.5) * 0.7,
-        rotSpeed: (Math.random() - 0.5) * 0.07,
-        scale: 0,
+        rotation: (Math.random() - 0.5) * 0.5,
+        rotSpeed: (Math.random() - 0.5) * 0.05,
         alpha: 0,
         landed: false,
         visible: true,
@@ -126,7 +106,7 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
   const heartsRef = useRef<Heart[]>([]);
   const rafRef = useRef<number>(0);
   const phaseRef = useRef<Phase>('idle');
-  const startTimeRef = useRef<number>(0);
+  const startTimeRef = useRef(0);
   const isDragging = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('idle');
@@ -153,11 +133,10 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     hearts.forEach((h) => {
       if (!h.visible) return;
 
-      // Launch when delay has passed
       if (!h.launched) {
         if (elapsed < h.delay) {
           allSettled = false;
-          return; // not yet
+          return;
         }
         h.launched = true;
       }
@@ -165,45 +144,38 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
       if (!h.landed) {
         allSettled = false;
 
-        // Spring toward target
         const dx = h.tx - h.cx;
         const dy = h.ty - h.cy;
         const dist = Math.hypot(dx, dy);
 
         if (dist < 2.5) {
-          h.cx = h.tx;
-          h.cy = h.ty;
-          h.vx = 0;
-          h.vy = 0;
+          h.cx = h.tx; h.cy = h.ty;
+          h.vx = 0; h.vy = 0;
           h.landed = true;
-          h.scale = 1;
+          h.currentSize = h.finalSize;
           h.alpha = 1;
-          h.size = h.finalSize;
         } else {
-          // Spring force
-          h.vx += dx * 0.10;
-          h.vy += dy * 0.10;
-          // Damping
-          h.vx *= 0.74;
-          h.vy *= 0.74;
+          // Spring toward target
+          h.vx += dx * 0.09;
+          h.vy += dy * 0.09;
+          h.vx *= 0.76;
+          h.vy *= 0.76;
           h.cx += h.vx;
           h.cy += h.vy;
           h.rotation += h.rotSpeed;
 
-          // Grow from 0 → finalSize as it travels
-          const progress = Math.min(1, 1 - dist / Math.hypot(h.tx - canvas.width / 2, h.ty - canvas.height * 0.56));
-          h.scale = Math.min(1, h.scale + 0.055);
-          h.alpha = Math.min(1, h.alpha + 0.07);
-          h.size = h.finalSize * h.scale;
+          // Grow from tiny → full size as it travels (perspective zoom feel)
+          h.currentSize = Math.min(h.finalSize, h.currentSize + (h.finalSize / 18));
+          h.alpha = Math.min(1, h.alpha + 0.08);
         }
       }
 
-      drawHeart(ctx, h.cx, h.cy, h.size, h.color, h.rotation, h.alpha);
+      drawEmoji(ctx, h.cx, h.cy, h.currentSize, h.alpha);
     });
 
     if (allSettled && phaseRef.current === 'bursting') {
       setPhaseSync('swipe');
-      setTimeout(() => setShowHint(true), 500);
+      setTimeout(() => setShowHint(true), 400);
       return;
     }
 
@@ -223,15 +195,14 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     setShowHint(false);
     setClearedPct(0);
 
-    const start = (ts: number) => {
+    rafRef.current = requestAnimationFrame((ts) => {
       startTimeRef.current = ts;
       runPhysics(ts);
-    };
-    rafRef.current = requestAnimationFrame(start);
+    });
     return () => cancelAnimationFrame(rafRef.current);
   }, [active, runPhysics]);
 
-  // ── Static redraw (swipe phase) ──────────────────────────────────────────
+  // ── Static redraw ────────────────────────────────────────────────────────
   const redrawStatic = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -239,7 +210,7 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     heartsRef.current.forEach((h) => {
       if (!h.visible) return;
-      drawHeart(ctx, h.tx, h.ty, h.finalSize, h.color, h.rotation, 1);
+      drawEmoji(ctx, h.tx, h.ty, h.finalSize, 1);
     });
   }, []);
 
@@ -315,7 +286,6 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     >
       <canvas ref={canvasRef} className="heart-burst-canvas" />
 
-      {/* Minimal progress bar */}
       {phase === 'swipe' && (
         <div className="swipe-progress-bar">
           <div
@@ -325,11 +295,10 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
         </div>
       )}
 
-      {/* Minimal floating hint */}
       {showHint && phase === 'swipe' && (
         <div className="swipe-hint">
           <span className="swipe-hint-hand">✋</span>
-          <span className="swipe-hint-text">Swipe to reveal your letter 💌</span>
+          <span className="swipe-hint-text">Swipe to reveal your letter</span>
         </div>
       )}
     </div>
