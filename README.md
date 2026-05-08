@@ -30,14 +30,12 @@ npm run dev        # http://localhost:4000
 
 ## Deployment
 
-### Frontend → Vercel
-1. Import the repo in Vercel
-2. Set **Root Directory** to `fend`
-3. Add env var: `VITE_API_URL=https://<your-render-service>.onrender.com`
+### Frontend → Vercel (`https://143letters.vercel.app`)
+1. Import the repo in Vercel, set **Root Directory** to `fend`
+2. Add env var: `VITE_API_URL=https://letter-0yl6.onrender.com`
+3. Redeploy
 
-### Backend → Render
-1. Create a new **Web Service** in Render
-2. Set **Root Directory** to `backend`
-3. Build command: `npm install`
-4. Start command: `npm start`
-5. Add env var: `FRONTEND_URL=https://<your-vercel-app>.vercel.app`
+### Backend → Render (`https://letter-0yl6.onrender.com`)
+1. Web Service connected to `Niru-9/Letter`, root dir `backend`
+2. Build: `npm install` | Start: `npm start`
+3. Env var: `FRONTEND_URL=https://143letters.vercel.app` (optional, already hardcoded)

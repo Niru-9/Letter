@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   'https://143letters.vercel.app',   // production Vercel frontend
   'http://localhost:3000',           // local dev
-  process.env.FRONTEND_URL,         // any extra override via env
+  process.env.FRONTEND_URL,         // any extra override via env var
 ].filter(Boolean);
 
 app.use(
