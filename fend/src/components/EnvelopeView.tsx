@@ -1,49 +1,41 @@
 import { useState } from 'react';
-import { HeartBurst } from './HeartBurst';
 
 interface EnvelopeViewProps {
   onOpen: () => void;
 }
 
 export function EnvelopeView({ onOpen }: EnvelopeViewProps) {
-  const [phase, setPhase] = useState<'idle' | 'burst' | 'open' | 'out'>('idle');
+  const [isOpen, setIsOpen] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const handleTap = () => {
-    if (phase !== 'idle') return;
-    setPhase('burst');
-  };
+  const handleOpen = () => {
+    if (isOpen) return;
+    setIsOpen(true);
 
-  // Called by HeartBurst once user has swiped enough hearts away
-  const handleBurstDone = () => {
-    setPhase('open');
-    setTimeout(() => setPhase('out'), 1800);
-    setTimeout(() => onOpen(), 3000);
+    setTimeout(() => {
+      setIsTransitioning(true);
+    }, 2000);
+
+    setTimeout(() => {
+      onOpen();
+    }, 4000);
   };
 
   return (
-    <>
-      <HeartBurst active={phase === 'burst'} onDone={handleBurstDone} />
-
-      <div className="envelope-scene">
-        <div
-          className={[
-            'envelope-wrapper',
-            phase === 'open' || phase === 'out' ? 'open' : '',
-            phase === 'out' ? 'transitioning-out' : '',
-          ].filter(Boolean).join(' ')}
-          onClick={handleTap}
-        >
-          <div className="envelope-body">
-            <div className="envelope-front-left" />
-            <div className="envelope-front-right" />
-            <div className="envelope-front-bottom" />
-          </div>
-          <div className="letter-inside" />
-          <div className="envelope-flap" />
+    <div className="envelope-scene">
+      <div
+        className={`envelope-wrapper ${isOpen ? 'open' : ''} ${isTransitioning ? 'transitioning-out' : ''}`}
+        onClick={handleOpen}
+      >
+        <div className="envelope-body">
+          <div className="envelope-front-left"></div>
+          <div className="envelope-front-right"></div>
+          <div className="envelope-front-bottom"></div>
         </div>
-
-        {phase === 'idle' && <h2 className="envelope-hint">Tap to open</h2>}
+        <div className="letter-inside"></div>
+        <div className="envelope-flap"></div>
       </div>
-    </>
+      {!isOpen && <h2 className="envelope-hint">Tap to open</h2>}
+    </div>
   );
 }
