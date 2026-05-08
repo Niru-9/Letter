@@ -627,7 +627,11 @@ body {
   z-index: 50;
   overflow: hidden;
   cursor: crosshair;
-  touch-action: none; /* prevent scroll while swiping */
+  touch-action: none;
+  pointer-events: all;
+  background: #fff0f0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .heart-burst-canvas {
@@ -635,6 +639,7 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 /* Progress bar at the bottom */
