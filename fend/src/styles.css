@@ -51,6 +51,11 @@ body {
   width: 100vw;
 }
 
+/* Allow letter view container to scroll */
+body.letter-open {
+  overflow: hidden;
+}
+
 #root {
   height: 100%;
   width: 100%;
@@ -66,6 +71,12 @@ body {
   align-items: center;
   justify-content: center;
   perspective: 1000px;
+}
+
+/* When reading a letter — let the letter view scroll */
+.app-container.letter-scene-active {
+  align-items: flex-start;
+  overflow: hidden;
 }
 
 /* ── BACKGROUND CANVAS ────────────────────────────────────────────────────── */
@@ -333,18 +344,21 @@ body {
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: fadeIn 1.5s ease-out forwards;
 }
 
 .letter-paper {
-  background: linear-gradient(160deg, #fffdf9 0%, var(--nude-white) 100%);
+  background: linear-gradient(160deg, #fffdf9 0%, #faf3e8 100%);
   width: 100%;
   max-width: 600px;
-  height: 80vh;
-  max-height: 800px;
+  /* Grows with content — no fixed height */
+  min-height: 80vh;
+  height: auto;
   border-radius: 12px;
   box-shadow:
     0 2px 0 #e8ddd4,
@@ -352,24 +366,20 @@ body {
     0 20px 50px rgba(215, 189, 176, 0.35);
   padding: 40px;
   position: relative;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* No overflow — container scrolls */
+  overflow: visible;
   color: var(--color-text-dark);
-}
-
-/* Subtle lined paper effect */
-.letter-paper::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: repeating-linear-gradient(
-    transparent,
-    transparent 31px,
-    rgba(214, 204, 194, 0.25) 31px,
-    rgba(214, 204, 194, 0.25) 32px
-  );
-  pointer-events: none;
-  border-radius: 12px;
+  /* Lined paper repeats naturally as content grows */
+  background-image:
+    linear-gradient(160deg, #fffdf9 0%, #faf3e8 100%),
+    repeating-linear-gradient(
+      transparent,
+      transparent 31px,
+      rgba(214, 204, 194, 0.28) 31px,
+      rgba(214, 204, 194, 0.28) 32px
+    );
+  background-blend-mode: multiply;
+  margin-bottom: 40px;
 }
 
 .letter-top-dec {
@@ -543,32 +553,6 @@ body {
   will-change: transform;
 }
 
-/* ── AUDIO TOGGLE ─────────────────────────────────────────────────────────── */
-.audio-toggle {
-  position: absolute;
-  bottom: 28px;
-  right: 28px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 100;
-  transition: transform 0.2s, background 0.2s;
-  will-change: transform;
-}
-
-.audio-toggle:hover {
-  background: rgba(255, 255, 255, 0.9);
-  transform: scale(1.1);
-}
-
 /* ── ANIMATIONS ───────────────────────────────────────────────────────────── */
 
 /* Use transform-only animations for GPU acceleration */
@@ -620,6 +604,213 @@ body {
   100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
 }
 
+/* ── PHOTO IN LETTER ──────────────────────────────────────────────────────── */
+.letter-photo-wrapper {
+  margin-top: 28px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.letter-photo-wrapper.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.letter-photo {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(215, 189, 176, 0.5);
+  /* Slight polaroid feel */
+  border: 6px solid #fff;
+  outline: 1px solid var(--nude-muted);
+}
+
+/* ── PHOTO UPLOAD IN CREATE ───────────────────────────────────────────────── */
+.photo-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--nude-dark);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--color-text-mid);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.photo-upload-btn:hover {
+  border-color: var(--color-primary);
+  background: rgba(251, 162, 171, 0.08);
+  color: var(--color-primary);
+}
+
+.photo-upload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.photo-preview-wrapper {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.photo-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 14px;
+  display: block;
+  border: 1px solid var(--nude-muted);
+}
+
+.photo-remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.photo-remove-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.photo-uploading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--color-text-mid);
+  font-family: var(--font-body);
+}
+
+.spin {
+  animation: spinAnim 0.9s linear infinite;
+}
+
+@keyframes spinAnim {
+  to { transform: rotate(360deg); }
+}
+
+/* ── ENVELOPE DECORATIONS ─────────────────────────────────────────────────── */
+
+.envelope-body {
+  background: #f5ede0 !important;
+}
+.envelope-front-left  { border-color: transparent transparent transparent #f0e4d0 !important; }
+.envelope-front-right { border-color: transparent #f5ede0 transparent transparent !important; }
+.envelope-front-bottom{ border-color: transparent transparent #e8d8c0 transparent !important; }
+.envelope-flap        { border-color: #e8d8c0 transparent transparent transparent !important; }
+
+.envelope-border-line {
+  position: absolute;
+  inset: 8px;
+  border: 1.5px solid rgba(251, 162, 171, 0.5);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.env-rose {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+}
+.env-rose-bl { bottom: -4px; left: -4px; }
+.env-rose-br { bottom: -4px; right: -4px; }
+.env-rose-tl { top: -4px;    left: -4px; }
+.env-rose-tr { top: -4px;    right: -4px; }
+
+.wax-seal {
+  position: absolute;
+  /* Flap is a CSS border triangle pointing down.
+     The tip of the flap (V point) is at bottom-center.
+     Position seal just above the tip so it sits on the seam. */
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(30, 80, 120, 0.35));
+  transition: opacity 0.4s ease;
+}
+
+/* Hide seal once flap has flipped */
+.envelope-wrapper.open .wax-seal {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* ── LETTER PAPER DECORATIONS ─────────────────────────────────────────────── */
+
+.letter-paper {
+  background: linear-gradient(160deg, #fdf8f0 0%, #faf3e8 100%) !important;
+  position: relative;
+}
+
+.letter-rose {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.92;
+}
+.letter-rose-tl { top: -8px;    left: -8px; }
+.letter-rose-tr { top: -8px;    right: -8px; }
+.letter-rose-bl { bottom: -8px; left: -8px; }
+.letter-rose-br { bottom: -8px; right: -8px; }
+
+/* Thin inner border on letter */
+.letter-paper::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(74, 143, 192, 0.2);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.letter-top-dec  { position: relative; z-index: 3; padding-top: 10px; }
+.letter-content  { position: relative; z-index: 3; padding: 0 24px; }
+.seal-button-container { position: relative; z-index: 3; }
+
+/* Mobile: slightly smaller roses */
+@media (max-width: 768px) {
+  .letter-rose {
+    width: 90px !important;
+    height: 90px !important;
+  }
+  .env-rose {
+    width: 80px !important;
+    height: 80px !important;
+  }
+}
+
 /* ── MEDIA QUERIES ────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .gate-title {
@@ -632,7 +823,7 @@ body {
 
   .letter-paper {
     padding: 24px 18px;
-    height: 85vh;
+    min-height: 85vh;
   }
 
   .letter-content {
@@ -649,7 +840,6 @@ body {
     bottom: 18px;
     right: 18px;
   }
-
   .envelope-wrapper {
     transform: scale(0.82);
   }
