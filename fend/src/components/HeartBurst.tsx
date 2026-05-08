@@ -1,116 +1,119 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-// ── Types ────────────────────────────────────────────────────────────────────
 interface Heart {
   id: number;
-  // final resting position (where it lands on screen)
+  // final resting position
   tx: number;
   ty: number;
-  // current animated position
+  // current position
   cx: number;
   cy: number;
-  size: number;
-  color: string;
-  rotation: number;
-  rotationSpeed: number;
-  // physics
+  // velocity
   vx: number;
   vy: number;
+  size: number;
+  finalSize: number;
+  color: string;
+  rotation: number;
+  rotSpeed: number;
+  scale: number;
+  alpha: number;
   landed: boolean;
   visible: boolean;
-  scale: number; // for pop-in effect
+  // delay before this heart launches (ms)
+  delay: number;
+  launched: boolean;
 }
 
-// Rich reds + deep pinks — fully opaque
 const COLORS = [
   '#e8003d', '#c0002e', '#ff1744', '#d50000',
   '#ff4569', '#b71c1c', '#e53935', '#ff5252',
-  '#c62828', '#ad1457', '#e91e63',
+  '#c62828', '#ad1457',
 ];
 
-const BRUSH_RADIUS = 65;
+const BRUSH_RADIUS = 62;
 const CLEAR_THRESHOLD = 0.68;
 
-// ── Heart drawing ────────────────────────────────────────────────────────────
 function drawHeart(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
   size: number, color: string,
-  rotation: number, scale: number
+  rotation: number, alpha: number
 ) {
-  const s = (size / 2) * scale;
+  if (alpha <= 0 || size <= 0) return;
+  const s = size / 2;
   ctx.save();
+  ctx.globalAlpha = alpha;
   ctx.translate(x, y);
   ctx.rotate(rotation);
   ctx.beginPath();
   ctx.moveTo(0, s * 0.35);
-  ctx.bezierCurveTo(-s * 0.1,  s * 0.1,  -s,  s * 0.1,  -s, -s * 0.25);
-  ctx.bezierCurveTo(-s, -s * 0.75,  0, -s * 0.9,   0, -s * 0.4);
-  ctx.bezierCurveTo( 0, -s * 0.9,   s, -s * 0.75,  s, -s * 0.25);
-  ctx.bezierCurveTo( s,  s * 0.1,   s * 0.1, s * 0.1, 0, s * 0.35);
+  ctx.bezierCurveTo(-s * 0.1, s * 0.1, -s, s * 0.1, -s, -s * 0.25);
+  ctx.bezierCurveTo(-s, -s * 0.75, 0, -s * 0.9, 0, -s * 0.4);
+  ctx.bezierCurveTo(0, -s * 0.9, s, -s * 0.75, s, -s * 0.25);
+  ctx.bezierCurveTo(s, s * 0.1, s * 0.1, s * 0.1, 0, s * 0.35);
   ctx.closePath();
   ctx.fillStyle = color;
-  ctx.globalAlpha = 1;
   ctx.fill();
   ctx.restore();
 }
 
-// ── Build hearts with physics launch vectors ─────────────────────────────────
 function buildHearts(w: number, h: number): Heart[] {
   const isMobile = w < 768;
-  // Dense enough to fully cover screen
-  const cols = isMobile ? 9 : 14;
-  const rows = isMobile ? 14 : 17;
+  const cols = isMobile ? 8 : 13;
+  const rows = isMobile ? 13 : 16;
   const hearts: Heart[] = [];
   let id = 0;
 
-  // Origin: envelope is roughly center-bottom of screen
+  // Envelope origin — center of screen, slightly below middle
   const ox = w * 0.5;
-  const oy = h * 0.58;
+  const oy = h * 0.56;
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      // Target position — dense grid with jitter
-      const jx = (Math.random() - 0.5) * (w / cols) * 0.9;
-      const jy = (Math.random() - 0.5) * (h / rows) * 0.9;
+      const jx = (Math.random() - 0.5) * (w / cols) * 0.85;
+      const jy = (Math.random() - 0.5) * (h / rows) * 0.85;
       const tx = (w / (cols - 1)) * c + jx;
       const ty = (h / (rows - 1)) * r + jy;
 
-      // Launch vector: from envelope origin toward target, with overshoot
+      // Distance from origin determines delay — close hearts launch first
+      const dist = Math.hypot(tx - ox, ty - oy);
+      const maxDist = Math.hypot(w, h);
+      // Stagger: 0ms (closest) → 600ms (farthest)
+      const delay = (dist / maxDist) * 600 + Math.random() * 80;
+
+      // Direction vector from origin to target
       const dx = tx - ox;
       const dy = ty - oy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const speed = (dist / 400) * (Math.random() * 0.4 + 0.8); // faster for farther hearts
+      const len = Math.max(dist, 1);
+
+      // Initial velocity: fast outward burst, will spring to target
+      const speed = 18 + (dist / maxDist) * 14;
 
       hearts.push({
         id: id++,
         tx, ty,
-        cx: ox + (Math.random() - 0.5) * 30,
-        cy: oy + (Math.random() - 0.5) * 20,
-        size: Math.random() * 22 + 30, // 30–52px — big
+        cx: ox,
+        cy: oy,
+        vx: (dx / len) * speed + (Math.random() - 0.5) * 5,
+        vy: (dy / len) * speed + (Math.random() - 0.5) * 5,
+        finalSize: Math.random() * 22 + 28,
+        size: 0,
         color: COLORS[Math.floor(Math.random() * COLORS.length)],
-        rotation: (Math.random() - 0.5) * 0.8,
-        rotationSpeed: (Math.random() - 0.5) * 0.08,
-        vx: (dx / dist) * speed * 18 + (Math.random() - 0.5) * 4,
-        vy: (dy / dist) * speed * 18 + (Math.random() - 0.5) * 4,
+        rotation: (Math.random() - 0.5) * 0.7,
+        rotSpeed: (Math.random() - 0.5) * 0.07,
+        scale: 0,
+        alpha: 0,
         landed: false,
         visible: true,
-        scale: 0.1,
+        delay,
+        launched: false,
       });
     }
   }
-
-  // Stagger launch: hearts closer to origin launch first
-  hearts.sort((a, b) => {
-    const da = Math.hypot(a.tx - ox, a.ty - oy);
-    const db = Math.hypot(b.tx - ox, b.ty - oy);
-    return da - db;
-  });
-
   return hearts;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
 interface HeartBurstProps {
   active: boolean;
   onDone: () => void;
@@ -123,8 +126,8 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
   const heartsRef = useRef<Heart[]>([]);
   const rafRef = useRef<number>(0);
   const phaseRef = useRef<Phase>('idle');
+  const startTimeRef = useRef<number>(0);
   const isDragging = useRef(false);
-  const launchIndexRef = useRef(0); // how many hearts have been launched
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [clearedPct, setClearedPct] = useState(0);
@@ -135,90 +138,100 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     setPhase(p);
   };
 
-  // ── Physics render loop ──────────────────────────────────────────────────
-  const runPhysics = useCallback(() => {
+  // ── Physics loop ─────────────────────────────────────────────────────────
+  const runPhysics = useCallback((timestamp: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
     const hearts = heartsRef.current;
-    const W = canvas.width;
-    const H = canvas.height;
+    const elapsed = timestamp - startTimeRef.current;
 
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Launch a few more hearts each frame (staggered burst effect)
-    const LAUNCH_PER_FRAME = 4;
-    const idx = launchIndexRef.current;
-    launchIndexRef.current = Math.min(idx + LAUNCH_PER_FRAME, hearts.length);
+    let allSettled = true;
 
-    let allLanded = true;
-
-    hearts.forEach((h, i) => {
+    hearts.forEach((h) => {
       if (!h.visible) return;
-      if (i >= launchIndexRef.current) return; // not launched yet
+
+      // Launch when delay has passed
+      if (!h.launched) {
+        if (elapsed < h.delay) {
+          allSettled = false;
+          return; // not yet
+        }
+        h.launched = true;
+      }
 
       if (!h.landed) {
-        allLanded = false;
+        allSettled = false;
 
-        // Move toward target with spring-like deceleration
+        // Spring toward target
         const dx = h.tx - h.cx;
         const dy = h.ty - h.cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dist = Math.hypot(dx, dy);
 
-        if (dist < 3) {
+        if (dist < 2.5) {
           h.cx = h.tx;
           h.cy = h.ty;
+          h.vx = 0;
+          h.vy = 0;
           h.landed = true;
           h.scale = 1;
+          h.alpha = 1;
+          h.size = h.finalSize;
         } else {
-          // Spring: accelerate toward target
-          h.vx += dx * 0.12;
-          h.vy += dy * 0.12;
-          // Dampen
-          h.vx *= 0.72;
-          h.vy *= 0.72;
+          // Spring force
+          h.vx += dx * 0.10;
+          h.vy += dy * 0.10;
+          // Damping
+          h.vx *= 0.74;
+          h.vy *= 0.74;
           h.cx += h.vx;
           h.cy += h.vy;
-          h.rotation += h.rotationSpeed;
-          // Pop-in scale
-          h.scale = Math.min(1, h.scale + 0.06);
+          h.rotation += h.rotSpeed;
+
+          // Grow from 0 → finalSize as it travels
+          const progress = Math.min(1, 1 - dist / Math.hypot(h.tx - canvas.width / 2, h.ty - canvas.height * 0.56));
+          h.scale = Math.min(1, h.scale + 0.055);
+          h.alpha = Math.min(1, h.alpha + 0.07);
+          h.size = h.finalSize * h.scale;
         }
       }
 
-      drawHeart(ctx, h.cx, h.cy, h.size, h.color, h.rotation, h.scale);
+      drawHeart(ctx, h.cx, h.cy, h.size, h.color, h.rotation, h.alpha);
     });
 
-    // Check if all launched hearts have landed
-    const allLaunched = launchIndexRef.current >= hearts.length;
-    if (allLaunched && allLanded && phaseRef.current === 'bursting') {
+    if (allSettled && phaseRef.current === 'bursting') {
       setPhaseSync('swipe');
       setTimeout(() => setShowHint(true), 500);
-      return; // stop RAF — redraw only happens on swipe now
+      return;
     }
 
     rafRef.current = requestAnimationFrame(runPhysics);
   }, []);
 
-  // ── Start burst ──────────────────────────────────────────────────────────
+  // ── Start ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!active) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
     heartsRef.current = buildHearts(canvas.width, canvas.height);
-    launchIndexRef.current = 0;
     setPhaseSync('bursting');
     setShowHint(false);
     setClearedPct(0);
 
-    rafRef.current = requestAnimationFrame(runPhysics);
+    const start = (ts: number) => {
+      startTimeRef.current = ts;
+      runPhysics(ts);
+    };
+    rafRef.current = requestAnimationFrame(start);
     return () => cancelAnimationFrame(rafRef.current);
   }, [active, runPhysics]);
 
-  // ── Swipe clear ──────────────────────────────────────────────────────────
+  // ── Static redraw (swipe phase) ──────────────────────────────────────────
   const redrawStatic = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -226,10 +239,11 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     heartsRef.current.forEach((h) => {
       if (!h.visible) return;
-      drawHeart(ctx, h.tx, h.ty, h.size, h.color, h.rotation, 1);
+      drawHeart(ctx, h.tx, h.ty, h.finalSize, h.color, h.rotation, 1);
     });
   }, []);
 
+  // ── Swipe clear ──────────────────────────────────────────────────────────
   const clearNear = useCallback((clientX: number, clientY: number) => {
     if (phaseRef.current !== 'swipe') return;
     const canvas = canvasRef.current;
@@ -241,9 +255,7 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     let changed = false;
     heartsRef.current.forEach((h) => {
       if (!h.visible) return;
-      const dx = h.tx - px;
-      const dy = h.ty - py;
-      if (dx * dx + dy * dy < BRUSH_RADIUS * BRUSH_RADIUS) {
+      if ((h.tx - px) ** 2 + (h.ty - py) ** 2 < BRUSH_RADIUS ** 2) {
         h.visible = false;
         changed = true;
       }
@@ -265,7 +277,7 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     }
   }, [redrawStatic, onDone]);
 
-  // ── Pointer / touch handlers ─────────────────────────────────────────────
+  // ── Pointer / touch ──────────────────────────────────────────────────────
   const onPointerDown = (e: React.PointerEvent) => {
     isDragging.current = true;
     clearNear(e.clientX, e.clientY);
@@ -303,7 +315,7 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
     >
       <canvas ref={canvasRef} className="heart-burst-canvas" />
 
-      {/* Progress bar */}
+      {/* Minimal progress bar */}
       {phase === 'swipe' && (
         <div className="swipe-progress-bar">
           <div
@@ -313,12 +325,11 @@ export function HeartBurst({ active, onDone }: HeartBurstProps) {
         </div>
       )}
 
-      {/* Swipe hint */}
+      {/* Minimal floating hint */}
       {showHint && phase === 'swipe' && (
         <div className="swipe-hint">
-          <div className="swipe-hint-hand">✋</div>
-          <div className="swipe-hint-text">Swipe away the hearts</div>
-          <div className="swipe-hint-sub">to reveal your letter 💌</div>
+          <span className="swipe-hint-hand">✋</span>
+          <span className="swipe-hint-text">Swipe to reveal your letter 💌</span>
         </div>
       )}
     </div>
