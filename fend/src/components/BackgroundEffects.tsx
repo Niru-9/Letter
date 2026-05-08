@@ -6,18 +6,23 @@ export function BackgroundEffects() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Detect mobile for performance tuning
+    const isMobile = window.innerWidth < 768;
+    const MAX_PARTICLES = isMobile ? 15 : 35;
+    const FPS_INTERVAL = isMobile ? 1000 / 30 : 1000 / 60; // 30fps mobile, 60fps desktop
+
     let animationFrameId: number;
+    let lastTime = 0;
     let particles: Array<{
       x: number;
       y: number;
       size: number;
       speedY: number;
       speedX: number;
-      type: 'heart' | 'particle' | 'light';
+      type: 'heart' | 'particle';
       opacity: number;
     }> = [];
 
@@ -25,84 +30,76 @@ export function BackgroundEffects() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     };
-
     window.addEventListener('resize', resize);
     resize();
 
-    const createParticles = () => {
-      if (particles.length < 50) {
-        const typeRand = Math.random();
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: canvas.height + 10,
-          size: typeRand > 0.8 ? Math.random() * 8 + 4 : Math.random() * 3 + 1,
-          speedY: Math.random() * 1 + 0.5,
-          speedX: Math.random() * 1 - 0.5,
-          type: typeRand > 0.9 ? 'heart' : typeRand > 0.6 ? 'light' : 'particle',
-          opacity: 0
-        });
-      }
+    const createParticle = () => {
+      if (particles.length >= MAX_PARTICLES) return;
+      const isHeart = Math.random() > 0.6;
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: canvas.height + 10,
+        size: isHeart ? Math.random() * 8 + 4 : Math.random() * 3 + 1,
+        speedY: Math.random() * 0.8 + 0.3,
+        speedX: Math.random() * 0.6 - 0.3,
+        type: isHeart ? 'heart' : 'particle',
+        opacity: 0,
+      });
     };
 
-    const drawHeart = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+    const drawHeart = (x: number, y: number, size: number) => {
+      const h = size * 0.3;
       ctx.beginPath();
-      const topCurveHeight = size * 0.3;
-      ctx.moveTo(x, y + topCurveHeight);
-      ctx.bezierCurveTo(x, y, x - size / 2, y, x - size / 2, y + topCurveHeight);
+      ctx.moveTo(x, y + h);
+      ctx.bezierCurveTo(x, y, x - size / 2, y, x - size / 2, y + h);
       ctx.bezierCurveTo(x - size / 2, y + size / 2, x, y + size * 0.8, x, y + size);
-      ctx.bezierCurveTo(x, y + size * 0.8, x + size / 2, y + size / 2, x + size / 2, y + topCurveHeight);
-      ctx.bezierCurveTo(x + size / 2, y, x, y, x, y + topCurveHeight);
+      ctx.bezierCurveTo(x, y + size * 0.8, x + size / 2, y + size / 2, x + size / 2, y + h);
+      ctx.bezierCurveTo(x + size / 2, y, x, y, x, y + h);
       ctx.closePath();
       ctx.fill();
     };
 
-    const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      createParticles();
+    const render = (timestamp: number) => {
+      animationFrameId = requestAnimationFrame(render);
 
-      particles.forEach((p, index) => {
+      // Throttle framerate on mobile
+      const elapsed = timestamp - lastTime;
+      if (elapsed < FPS_INTERVAL) return;
+      lastTime = timestamp - (elapsed % FPS_INTERVAL);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      createParticle();
+
+      particles = particles.filter((p) => {
         p.y -= p.speedY;
         p.x += p.speedX;
-        
-        // Fade in
-        if (p.opacity < 1 && p.y > canvas.height / 2) {
-          p.opacity += 0.01;
-        } else if (p.y < canvas.height / 3) {
-          // Fade out near top
-          p.opacity -= 0.01;
+
+        if (p.y > canvas.height * 0.6) {
+          p.opacity = Math.min(1, p.opacity + 0.02);
+        } else if (p.y < canvas.height * 0.25) {
+          p.opacity = Math.max(0, p.opacity - 0.02);
         }
 
-        if (p.opacity <= 0 && p.y < canvas.height / 2) {
-          particles.splice(index, 1);
-          return;
-        }
+        if (p.opacity <= 0 && p.y < canvas.height * 0.25) return false;
 
-        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.globalAlpha = p.opacity;
 
         if (p.type === 'heart') {
-          ctx.fillStyle = '#ff4d6d';
-          drawHeart(ctx, p.x, p.y, p.size);
-        } else if (p.type === 'light') {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fillStyle = '#ff8fa3';
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#ff8fa3';
-          ctx.fill();
-          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#FBA2AB';
+          drawHeart(p.x, p.y, p.size);
         } else {
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillStyle = 'rgba(254, 163, 142, 0.5)';
           ctx.fill();
         }
-      });
 
-      animationFrameId = requestAnimationFrame(render);
+        ctx.globalAlpha = 1;
+        return true;
+      });
     };
 
-    render();
+    animationFrameId = requestAnimationFrame(render);
 
     return () => {
       window.removeEventListener('resize', resize);
