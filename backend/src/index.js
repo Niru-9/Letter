@@ -1,10 +1,19 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { Redis } from '@upstash/redis';
 import { randomBytes } from 'crypto';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+
+// ── Redis ─────────────────────────────────────────────────────────────────────
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+
+const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
@@ -22,23 +31,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type'],
 }));
 
-app.use(express.json({ limit: '5mb' })); // allow photo URLs
-
-// ── In-memory store (resets on redeploy — fine for free tier) ────────────────
-// For persistence, swap with a free DB like Upstash Redis or Supabase later
-const letters = new Map();
-
-// Auto-delete letters older than 30 days to save memory
-const TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
-function generateId() {
-  return randomBytes(4).toString('hex'); // 8 char hex e.g. "a3f9c12b"
-}
+app.use(express.json({ limit: '5mb' }));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', letters: letters.size, timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+  try {
+    await redis.ping();
+    res.json({ status: 'ok', redis: 'connected', timestamp: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ status: 'error', redis: e.message });
+  }
 });
 
 app.get('/', (_req, res) => {
@@ -48,47 +51,52 @@ app.get('/', (_req, res) => {
 /**
  * POST /api/letters
  * Body: { message, password, photoUrl? }
- * Returns: { id } — short 8-char ID
+ * Returns: { id }
  */
-app.post('/api/letters', (req, res) => {
+app.post('/api/letters', async (req, res) => {
   const { message, password, photoUrl } = req.body;
   if (!message || !password) {
     return res.status(400).json({ error: 'message and password are required' });
   }
 
-  const id = generateId();
-  letters.set(id, {
-    message,
-    password,
-    photoUrl: photoUrl || null,
-    createdAt: Date.now(),
-  });
-
-  // Clean up expired letters
-  for (const [key, val] of letters.entries()) {
-    if (Date.now() - val.createdAt > TTL_MS) letters.delete(key);
+  try {
+    const id = randomBytes(4).toString('hex');
+    await redis.set(
+      `letter:${id}`,
+      JSON.stringify({ message, password, photoUrl: photoUrl || null }),
+      { ex: TTL_SECONDS }
+    );
+    res.json({ id });
+  } catch (e) {
+    console.error('Redis set error:', e);
+    res.status(500).json({ error: 'Failed to save letter' });
   }
-
-  res.json({ id });
 });
 
 /**
  * POST /api/letters/:id/unlock
  * Body: { password }
- * Returns: { message, photoUrl } on success, 401 on wrong password
+ * Returns: { message, photoUrl } or 401
  */
-app.post('/api/letters/:id/unlock', (req, res) => {
-  const letter = letters.get(req.params.id);
-  if (!letter) return res.status(404).json({ error: 'Letter not found 💔' });
-
+app.post('/api/letters/:id/unlock', async (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'password is required' });
 
-  if (letter.password.toLowerCase() !== password.toLowerCase()) {
-    return res.status(401).json({ error: 'Wrong password 💔' });
-  }
+  try {
+    const raw = await redis.get(`letter:${req.params.id}`);
+    if (!raw) return res.status(404).json({ error: 'Letter not found 💔' });
 
-  res.json({ message: letter.message, photoUrl: letter.photoUrl });
+    const letter = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+    if (letter.password.toLowerCase() !== password.toLowerCase()) {
+      return res.status(401).json({ error: 'Wrong password 💔' });
+    }
+
+    res.json({ message: letter.message, photoUrl: letter.photoUrl });
+  } catch (e) {
+    console.error('Redis get error:', e);
+    res.status(500).json({ error: 'Failed to retrieve letter' });
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
