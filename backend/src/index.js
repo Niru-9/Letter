@@ -9,8 +9,8 @@ const PORT = process.env.PORT || 4000;
 
 // ── Redis ─────────────────────────────────────────────────────────────────────
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  url: process.env.UPSTASH_REDIS_REST_URL || 'https://deciding-possum-139773.upstash.io',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || 'gQAAAAAAAiH9AAIgcDJkZjVkYmE0YjYwNDY0ZDMwODgxNzFkOTBmMWM2OGQ3Nw',
 });
 
 const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
